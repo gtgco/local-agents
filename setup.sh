@@ -3,6 +3,8 @@
 # Tested on macOS (Apple Silicon). Requires Homebrew.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "=== Local Agentic Development Setup ==="
 echo ""
 
@@ -13,7 +15,7 @@ if ! command -v brew &>/dev/null; then
 fi
 
 # 1. Install Goose CLI
-echo "[1/5] Installing Goose CLI..."
+echo "[1/7] Installing Goose CLI..."
 if command -v goose &>/dev/null; then
     echo "  Goose already installed: $(goose --version)"
 else
@@ -22,7 +24,7 @@ else
 fi
 
 # 2. Install Ollama
-echo "[2/5] Installing Ollama..."
+echo "[2/7] Installing Ollama..."
 if command -v ollama &>/dev/null; then
     echo "  Ollama already installed: $(ollama --version)"
 else
@@ -37,7 +39,7 @@ if ! curl -s http://localhost:11434/ &>/dev/null; then
 fi
 
 # 3. Pull the local model
-echo "[3/5] Pulling qwen3-coder-next model (~51GB)..."
+echo "[3/7] Pulling qwen3-coder-next model (~51GB)..."
 if ollama list 2>/dev/null | grep -q "qwen3-coder-next"; then
     echo "  Model already downloaded."
 else
@@ -45,8 +47,8 @@ else
     ollama pull qwen3-coder-next
 fi
 
-# 4. Install uv (for MCP server extensions)
-echo "[4/5] Installing uv (Python package manager)..."
+# 4. Install uv (for Python venvs and MCP server extensions)
+echo "[4/7] Installing uv (Python package manager)..."
 if command -v uv &>/dev/null; then
     echo "  uv already installed."
 else
@@ -54,14 +56,13 @@ else
 fi
 
 # 5. Set up Minions
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MINIONS_DIR="$SCRIPT_DIR/minions"
 
-echo "[5/5] Setting up Minions (Stanford hazyresearch/minions)..."
-if [ ! -d "$MINIONS_DIR" ]; then
-    echo "  Error: minions/ directory not found. Run:"
-    echo "    git submodule update --init"
-    exit 1
+echo "[5/7] Setting up Minions (Stanford hazyresearch/minions)..."
+if [ ! -d "$MINIONS_DIR/.git" ] && [ ! -f "$MINIONS_DIR/.git" ]; then
+    echo "  Initializing submodule..."
+    cd "$SCRIPT_DIR"
+    git submodule update --init --recursive
 fi
 
 if [ ! -d "$MINIONS_DIR/.venv" ]; then
@@ -75,25 +76,32 @@ else
     echo "  Minions venv already exists."
 fi
 
-# 6. Configure Goose
-echo ""
-echo "[6/6] Configuring Goose..."
+# Apply mistralai import fix if needed
+if grep -q "^from minions.clients.mistral import MistralClient" "$MINIONS_DIR/minions/clients/__init__.py" 2>/dev/null; then
+    echo "  Applying mistralai import compatibility fix..."
+    sed -i.bak 's/^from minions.clients.mistral import MistralClient/try:\n    from minions.clients.mistral import MistralClient\nexcept ImportError:\n    MistralClient = None/' \
+        "$MINIONS_DIR/minions/clients/__init__.py" 2>/dev/null || true
+fi
+
+# 6. Install Goose config with all extensions
+echo "[6/7] Configuring Goose with extensions..."
 GOOSE_CONFIG_DIR="$HOME/.config/goose"
 mkdir -p "$GOOSE_CONFIG_DIR"
 
-if [ ! -f "$GOOSE_CONFIG_DIR/config.yaml" ]; then
-    cat > "$GOOSE_CONFIG_DIR/config.yaml" << 'YAML'
-GOOSE_PROVIDER: ollama
-GOOSE_MODEL: qwen3-coder-next
-OLLAMA_HOST: http://localhost:11434
-YAML
-    echo "  Created Goose config at $GOOSE_CONFIG_DIR/config.yaml"
-    echo "  Run 'goose configure' to add extensions and customize."
-else
-    echo "  Goose config already exists. Skipping."
-fi
+cp "$SCRIPT_DIR/goose-config.yaml" "$GOOSE_CONFIG_DIR/config.yaml"
+echo "  Installed Goose config to $GOOSE_CONFIG_DIR/config.yaml"
 
-# 7. Check for .env
+# 7. Pre-cache MCP server dependencies so first goose session is fast
+echo "[7/7] Pre-caching MCP extension dependencies..."
+echo "  Caching duckduckgo-mcp-server..."
+uvx --quiet duckduckgo-mcp-server --help >/dev/null 2>&1 || true
+echo "  Caching mcp-server-fetch..."
+uvx --quiet mcp-server-fetch --help >/dev/null 2>&1 || true
+echo "  Caching mcp-server-git..."
+uvx --quiet mcp-server-git --help >/dev/null 2>&1 || true
+echo "  Done."
+
+# 8. Check for .env
 echo ""
 if [ ! -f "$SCRIPT_DIR/.env" ]; then
     echo "⚠  No .env file found. Copy the example and add your API keys:"
