@@ -1,0 +1,3 @@
+[submodule "minions"]
+	path = minions
+	url = https://github.com/HazyResearch/minions.git

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Minions wrapper - sources API keys and runs the minions CLI
+# Usage: minions-run [minions CLI args...]
+# Example: minions-run --context ./myfile.py --protocol minion
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MINIONS_DIR="$SCRIPT_DIR/minions"
+
+# Source API keys from .env in this repo, then fall back to environment
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
+# Verify required keys
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+    echo "Error: ANTHROPIC_API_KEY not set. Create a .env file or export it."
+    echo "  cp .env.example .env  # then fill in your keys"
+    exit 1
+fi
+
+# Default local/remote models if not already set
+export MINIONS_LOCAL="${MINIONS_LOCAL:-ollama/qwen3-coder-next}"
+export MINIONS_REMOTE="${MINIONS_REMOTE:-anthropic/claude-opus-4-6}"
+
+# Activate venv and run
+source "$MINIONS_DIR/.venv/bin/activate"
+cd "$MINIONS_DIR"
+exec python minions_cli.py "$@"

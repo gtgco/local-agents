@@ -1,0 +1,36 @@
+# Secrets
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+minions/.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+minions/minion_logs/
+*.log
+
+# Ollama models (huge, downloaded separately)
+*.gguf
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Goose config (machine-specific, contains secrets)
+# Users should configure goose locally via `goose configure`
